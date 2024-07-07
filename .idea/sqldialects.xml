@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SqlDialectMappings">
+    <file url="file://$PROJECT_DIR$/migrations/000001_create_movie_table.down.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/migrations/000001_create_movie_table.up.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/migrations/000002_add_movies_check_constraints.down.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/migrations/000002_add_movies_check_constraints.up.sql" dialect="PostgreSQL" />
+  </component>
+</project>

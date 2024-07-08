@@ -44,7 +44,7 @@ func main() {
 	flag.StringVar(&cfg.env, "env", "dev", "Environment (dev|stag|prod")
 	// DB Flags
 	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("GREENLIGHT_DB_DSN"), "PostgreSQL DSN")
-	flag.IntVar(&cfg.db.maxCons, "db-max-conns", 25, "PostgreSQL max connections")
+	flag.IntVar(&cfg.db.maxCons, "db-max-conns", 1, "PostgreSQL max connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max idle connection time")
 	flag.Parse()
 

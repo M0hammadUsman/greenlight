@@ -2,6 +2,7 @@ package data
 
 import (
 	"errors"
+	"fmt"
 	"github.com/M0hammadUsman/greenlight/internal/validator"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -81,22 +82,26 @@ func (m MovieModel) Get(id int64) (*Movie, error) {
 	return &movie, nil
 }
 
-func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, error) {
-	query := `
-		SELECT id, created_at, title, year, runtime, genres, version
+func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, Metadata, error) {
+	query := fmt.Sprintf(`
+		SELECT COUNT(*) OVER(), id, created_at, title, year, runtime, genres, version
         FROM movies
         WHERE (TO_TSVECTOR('english', title) @@ PLAINTO_TSQUERY('english', $1) OR $1 = '')
         AND (genres @> $2 OR $2 = '{}')
-        ORDER BY id
-        `
+        ORDER BY %v %v, id ASC
+		LIMIT $3 OFFSET $4
+        `, filters.sortColumn(), filters.sortDirection())
 	ctx, cancel := newQueryContext(3)
 	defer cancel()
-	rows, _ := m.DB.Query(ctx, query, title, genres)
+	args := []any{title, genres, filters.limit(), filters.offset()}
+	rows, _ := m.DB.Query(ctx, query, args...)
 	defer rows.Close()
+	totalRecords := 0
 	movies := make([]*Movie, 0)
 	for rows.Next() {
 		var movie Movie
 		err := rows.Scan(
+			&totalRecords,
 			&movie.ID,
 			&movie.CreatedAt,
 			&movie.Title,
@@ -106,14 +111,15 @@ func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]*M
 			&movie.Version,
 		)
 		if err != nil {
-			return nil, err
+			return nil, Metadata{}, err
 		}
 		movies = append(movies, &movie)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, Metadata{}, err
 	}
-	return movies, nil
+	metadata := calculateMetadata(totalRecords, filters.Page, filters.PageSize)
+	return movies, metadata, nil
 }
 
 func (m MovieModel) Update(movie *Movie) error {

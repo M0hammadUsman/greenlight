@@ -25,6 +25,11 @@ type config struct {
 		maxCons     int
 		maxIdleTime string
 	}
+	limiter struct {
+		enabled bool
+		rps     float64
+		burst   int
+	}
 }
 
 // Dependencies lives here for the application
@@ -42,10 +47,15 @@ func main() {
 	// Setting up passed flags
 	flag.IntVar(&cfg.port, "port", 8080, "API server port")
 	flag.StringVar(&cfg.env, "env", "dev", "Environment (dev|stag|prod")
-	// DB Flags
+	// DB flags
 	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("GREENLIGHT_DB_DSN"), "PostgreSQL DSN")
-	flag.IntVar(&cfg.db.maxCons, "db-max-conns", 1, "PostgreSQL max connections")
+	flag.IntVar(&cfg.db.maxCons, "db-max-conns", 25, "PostgreSQL max connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max idle connection time")
+	// IP based rate limiter flags
+	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
+	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
+	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
+	// parsing flags
 	flag.Parse()
 
 	// Loggers configuration

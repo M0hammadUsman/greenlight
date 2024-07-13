@@ -24,3 +24,4 @@ go.work.sum
 # Project files
 *.pem
 *.toml
+_pycache_

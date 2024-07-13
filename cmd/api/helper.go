@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/M0hammadUsman/greenlight/internal/validator"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -108,4 +109,17 @@ func (app *application) readInt(qs url.Values, key string, defaultValue int, v *
 		return defaultValue
 	}
 	return i
+}
+
+func (app *application) runInBackground(fn func()) {
+	app.wg.Add(1)
+	go func() {
+		defer app.wg.Done()
+		defer func() {
+			if err := recover(); err != nil {
+				slog.Error(fmt.Errorf("%v", err).Error())
+			}
+		}()
+		fn()
+	}()
 }

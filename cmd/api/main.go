@@ -2,16 +2,21 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/M0hammadUsman/greenlight/internal/data"
+	"github.com/M0hammadUsman/greenlight/internal/mailer"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lmittmann/tint"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path"
+	"sync"
+	"syscall"
 	"time"
 )
 
@@ -30,14 +35,21 @@ type config struct {
 		rps     float64
 		burst   int
 	}
+	smtp struct {
+		host     string
+		port     int
+		username string
+		password string
+		sender   string
+	}
 }
 
 // Dependencies lives here for the application
 type application struct {
 	config config
 	models data.Models
-	logi   *log.Logger
-	loge   *log.Logger
+	mailer mailer.Mailer
+	wg     sync.WaitGroup
 }
 
 func main() {
@@ -52,14 +64,20 @@ func main() {
 	flag.IntVar(&cfg.db.maxCons, "db-max-conns", 25, "PostgreSQL max connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max idle connection time")
 	// IP based rate limiter flags
-	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
+	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", false, "Enable rate limiter")
 	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
 	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
+	// SMTP Server flags
+	flag.StringVar(&cfg.smtp.host, "smtp-host", "sandbox.smtp.mailtrap.io", "SMTP host")
+	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "SMTP port")
+	flag.StringVar(&cfg.smtp.username, "smtp-username", "107919fce4d92e", "SMTP username")
+	flag.StringVar(&cfg.smtp.password, "smtp-password", "681725dbce237d", "SMTP password")
+	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "Greenlight <no-reply@greenlight.alexedwards.net>", "SMTP sender")
 	// parsing flags
 	flag.Parse()
 
 	// Loggers configuration
-	logi, loge := configureLoggers()
+	configureLoggers()
 
 	// DB configuration
 	db, err := openDB(cfg)
@@ -72,26 +90,15 @@ func main() {
 	app := &application{
 		config: cfg,
 		models: data.NewModels(db),
-		logi:   logi,
-		loge:   loge,
+		mailer: mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
 	}
-
-	// Sensible Configs for server
-	srv := http.Server{
-		Addr:         fmt.Sprint(":", cfg.port),
-		Handler:      app.routes(),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  1 * time.Minute,
+	// Starting server
+	if err = app.serve(); err != nil {
+		slog.Error(err.Error(), "shutdown", "hard...")
 	}
-
-	slog.Info("starting server", "env", cfg.env, "port", cfg.port)
-
-	log.Fatal(srv.ListenAndServe())
-
 }
 
-func configureLoggers() (*log.Logger, *log.Logger) {
+func configureLoggers() {
 	tintHandler := tint.NewHandler(os.Stderr, &tint.Options{
 		AddSource: true,
 		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
@@ -106,11 +113,6 @@ func configureLoggers() (*log.Logger, *log.Logger) {
 		},
 	})
 	slog.SetDefault(slog.New(tintHandler))
-
-	logi := log.New(os.Stderr, "INFO\t", log.LstdFlags|log.Lmicroseconds|log.Lshortfile)
-	loge := log.New(os.Stderr, "ERROR\t", log.LstdFlags|log.Lmicroseconds|log.Llongfile)
-
-	return logi, loge
 }
 
 func openDB(cfg config) (*pgxpool.Pool, error) {
@@ -140,4 +142,42 @@ func openDB(cfg config) (*pgxpool.Pool, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+func (app *application) serve() error {
+	srv := http.Server{ // Sensible Configs for server
+		Addr:         fmt.Sprint(":", app.config.port),
+		Handler:      app.routes(),
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  1 * time.Minute,
+	}
+	shutdownError := make(chan error)
+	// Background goroutine to listen to termination signals -> SIGINT, SIGTERM
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+		s := <-quit
+		slog.Info("shutting down server", "signal", s.String())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			shutdownError <- err
+		}
+		slog.Info("completing background tasks", "addr", srv.Addr)
+		app.wg.Wait()
+		shutdownError <- nil
+	}() // Start the server normally
+	slog.Info("starting server", "env", app.config.env, "port", app.config.port)
+	err := srv.ListenAndServe()
+	if !errors.Is(err, http.ErrServerClosed) {
+		return err
+	} else {
+		slog.Info("waiting for ongoing http requests", "max wait", "5 sec...")
+	}
+	if err = <-shutdownError; err != nil {
+		return err
+	}
+	slog.Info("stopped server", "addr", srv.Addr)
+	return nil
 }

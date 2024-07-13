@@ -12,8 +12,12 @@ var (
 
 type Models struct {
 	Movies MovieModel
+	Users  UserModel
 }
 
 func NewModels(db *pgxpool.Pool) Models {
-	return Models{MovieModel{db}}
+	return Models{
+		MovieModel{DB: db},
+		UserModel{DB: db},
+	}
 }

@@ -6,4 +6,4 @@ CREATE TABLE IF NOT EXISTS movies (
     runtime INTEGER NOT NULL,
     genres TEXT[] NOT NULL,
     version INTEGER NOT NULL DEFAULT 1
-)
+);

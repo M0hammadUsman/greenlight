@@ -24,4 +24,4 @@ go.work.sum
 # Project files
 *.pem
 *.toml
-.idea
+.idea/

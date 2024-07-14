@@ -18,6 +18,9 @@ func (app *application) routes() http.Handler {
 	mux.HandleFunc("GET /v1/movies", app.listMoviesHandler)
 
 	mux.HandleFunc("POST /v1/users", app.registerUserHandler)
-	
+	mux.HandleFunc("PUT /v1/users/activated", app.activateUserHandler)
+
+	mux.HandleFunc("POST /v1/tokens/activation", app.createActivationTokenHandler)
+
 	return middlewares.Then(mux)
 }

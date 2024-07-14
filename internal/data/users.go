@@ -1,6 +1,7 @@
 package data
 
 import (
+	"crypto/sha256"
 	"errors"
 	"github.com/M0hammadUsman/greenlight/internal/validator"
 	"github.com/jackc/pgx/v5"
@@ -116,7 +117,7 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
 		&user.CreatedAt,
 		&user.Name,
 		&user.Email,
-		&user.Password,
+		&user.Password.hash,
 		&user.Activated,
 		&user.Version,
 	); err != nil {
@@ -137,7 +138,7 @@ func (m UserModel) UpdateUser(user *User) error {
 		WHERE id = $5 AND version = $6
 		RETURNING version
 		`
-	args := []any{user.Name, user.Email, user.Password, user.Activated, user.ID, user.Version}
+	args := []any{user.Name, user.Email, user.Password.hash, user.Activated, user.ID, user.Version}
 	ctx, cancel := newQueryContext(3)
 	defer cancel()
 	var version int
@@ -153,4 +154,38 @@ func (m UserModel) UpdateUser(user *User) error {
 		}
 	}
 	return nil
+}
+
+func (m UserModel) GetForToken(tokenScope, tokenPlainText string) (*User, error) {
+	tokenHash := sha256.Sum256([]byte(tokenPlainText))
+	query := `
+		SELECT u.id, u.created_at, u.name, u.email, u.password, u.activated, u.version
+		FROM users u
+		INNER JOIN tokens t
+		ON u.id = t.user_id
+		WHERE t.hash = $1
+		AND t.scope = $2
+		AND t.expiry > $3
+		`
+	args := []any{tokenHash[:], tokenScope, time.Now()} // [:] -> the pgx does not support arrays, only slices
+	var usr User
+	ctx, cancel := newQueryContext(3)
+	defer cancel()
+	if err := m.DB.QueryRow(ctx, query, args...).Scan(
+		&usr.ID,
+		&usr.CreatedAt,
+		&usr.Name,
+		&usr.Email,
+		&usr.Password.hash,
+		&usr.Activated,
+		&usr.Version,
+	); err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+	return &usr, nil
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"expvar"
 	"flag"
 	"fmt"
 	"github.com/M0hammadUsman/greenlight/internal/data"
@@ -15,6 +16,8 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -42,6 +45,9 @@ type config struct {
 		password string
 		sender   string
 	}
+	cors struct {
+		trustedOrigins []string
+	}
 }
 
 // Dependencies lives here for the application
@@ -58,7 +64,7 @@ func main() {
 
 	// Setting up passed flags
 	flag.IntVar(&cfg.port, "port", 8080, "API server port")
-	flag.StringVar(&cfg.env, "env", "dev", "Environment (dev|stag|prod")
+	flag.StringVar(&cfg.env, "env", "dev", "Environment (dev|stag|prod)")
 	// DB flags
 	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("GREENLIGHT_DB_DSN"), "PostgreSQL DSN")
 	flag.IntVar(&cfg.db.maxCons, "db-max-conns", 25, "PostgreSQL max connections")
@@ -73,25 +79,31 @@ func main() {
 	flag.StringVar(&cfg.smtp.username, "smtp-username", "107919fce4d92e", "SMTP username")
 	flag.StringVar(&cfg.smtp.password, "smtp-password", "681725dbce237d", "SMTP password")
 	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "Greenlight <no-reply@greenlight.alexedwards.net>", "SMTP sender")
+	// Trusted CORS Origin flag
+	flag.Func("cors-trusted-origins", "Trusted CORS origins (space separated)", func(val string) error {
+		cfg.cors.trustedOrigins = strings.Fields(val)
+		return nil
+	})
 	// parsing flags
 	flag.Parse()
-
 	// Loggers configuration
 	configureLoggers()
 
 	// DB configuration
 	db, err := openDB(cfg)
+
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 	slog.Info("database connection pool established")
-
 	app := &application{
 		config: cfg,
 		models: data.NewModels(db),
 		mailer: mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
 	}
+	//Exposing custom metrics
+	exposeCustomMetrics(db)
 	// Starting server
 	if err = app.serve(); err != nil {
 		slog.Error(err.Error(), "shutdown", "hard...")
@@ -180,4 +192,45 @@ func (app *application) serve() error {
 	}
 	slog.Info("stopped server", "addr", srv.Addr)
 	return nil
+}
+
+func exposeCustomMetrics(DB *pgxpool.Pool) {
+	expvar.NewString("version").Set(version)
+	expvar.Publish("goroutines", expvar.Func(func() any {
+		return runtime.NumGoroutine()
+	}))
+	expvar.Publish("timestamp", expvar.Func(func() any {
+		return time.Now().Unix()
+	}))
+	expvar.Publish("database", expvar.Func(func() any {
+		DBStats := DB.Stat()
+		stats := struct {
+			AcquireCount            int64
+			AcquireDuration         time.Duration
+			AcquiredConns           int32
+			CanceledAcquireCount    int64
+			ConstructingConns       int32
+			EmptyAcquireCount       int64
+			IdleConns               int32
+			MaxConns                int32
+			TotalConns              int32
+			NewConnsCount           int64
+			MaxLifetimeDestroyCount int64
+			MaxIdleDestroyCount     int64
+		}{
+			AcquireCount:            DBStats.AcquireCount(),
+			AcquireDuration:         DBStats.AcquireDuration(),
+			AcquiredConns:           DBStats.AcquiredConns(),
+			CanceledAcquireCount:    DBStats.CanceledAcquireCount(),
+			ConstructingConns:       DBStats.ConstructingConns(),
+			EmptyAcquireCount:       DBStats.EmptyAcquireCount(),
+			IdleConns:               DBStats.IdleConns(),
+			MaxConns:                DBStats.MaxConns(),
+			TotalConns:              DBStats.TotalConns(),
+			NewConnsCount:           DBStats.NewConnsCount(),
+			MaxLifetimeDestroyCount: DBStats.MaxLifetimeDestroyCount(),
+			MaxIdleDestroyCount:     DBStats.MaxIdleDestroyCount(),
+		}
+		return stats
+	}))
 }

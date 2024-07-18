@@ -6,6 +6,7 @@
 *.iml
 *.ipr
 # Binaries for programs and plugins
+bin/
 *.exe
 *.exe~
 *.dll
@@ -28,3 +29,4 @@ go.work.sum
 # Project files
 *.pem
 *.toml
+.envrc

@@ -65,7 +65,7 @@ func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst any
 			}
 			return fmt.Errorf("body contains incorrect JSON type (at character %d)", unmarshalTypeErr.Offset)
 		case strings.HasPrefix(err.Error(), "json: unknown field "):
-			fieldName := strings.Trim(err.Error(), "json: unknown field ")
+			fieldName := strings.TrimPrefix(err.Error(), "json: unknown field ")
 			return fmt.Errorf("body contains unknown key %s", fieldName)
 		case err.Error() == "http: request body too large":
 			return fmt.Errorf("body must not be larger than %d bytes", maxBytes)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"expvar"
-	"flag"
 	"fmt"
 	"github.com/M0hammadUsman/greenlight/internal/data"
 	"github.com/M0hammadUsman/greenlight/internal/mailer"
@@ -17,38 +16,16 @@ import (
 	"os/signal"
 	"path"
 	"runtime"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 )
 
-const version = "1.0.0"
+var version string
 
-type config struct {
-	port int
-	env  string
-	db   struct {
-		dsn         string
-		maxCons     int
-		maxIdleTime string
-	}
-	limiter struct {
-		enabled bool
-		rps     float64
-		burst   int
-	}
-	smtp struct {
-		host     string
-		port     int
-		username string
-		password string
-		sender   string
-	}
-	cors struct {
-		trustedOrigins []string
-	}
-}
+// Create a buildTime variable to hold the executable binary build time. Note that this
+// must be a string type, as the -X linker flag will only work with string variables.
+var buildTime string
 
 // Dependencies lives here for the application
 type application struct {
@@ -60,43 +37,18 @@ type application struct {
 
 func main() {
 
-	var cfg config
-
-	// Setting up passed flags
-	flag.IntVar(&cfg.port, "port", 8080, "API server port")
-	flag.StringVar(&cfg.env, "env", "dev", "Environment (dev|stag|prod)")
-	// DB flags
-	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("GREENLIGHT_DB_DSN"), "PostgreSQL DSN")
-	flag.IntVar(&cfg.db.maxCons, "db-max-conns", 25, "PostgreSQL max connections")
-	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max idle connection time")
-	// IP based rate limiter flags
-	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", false, "Enable rate limiter")
-	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
-	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
-	// SMTP Server flags
-	flag.StringVar(&cfg.smtp.host, "smtp-host", "sandbox.smtp.mailtrap.io", "SMTP host")
-	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "SMTP port")
-	flag.StringVar(&cfg.smtp.username, "smtp-username", "107919fce4d92e", "SMTP username")
-	flag.StringVar(&cfg.smtp.password, "smtp-password", "681725dbce237d", "SMTP password")
-	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "Greenlight <no-reply@greenlight.alexedwards.net>", "SMTP sender")
-	// Trusted CORS Origin flag
-	flag.Func("cors-trusted-origins", "Trusted CORS origins (space separated)", func(val string) error {
-		cfg.cors.trustedOrigins = strings.Fields(val)
-		return nil
-	})
-	// parsing flags
-	flag.Parse()
+	cfg := parseConfigFlags()
 	// Loggers configuration
 	configureLoggers()
 
 	// DB configuration
 	db, err := openDB(cfg)
-
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 	slog.Info("database connection pool established")
+
 	app := &application{
 		config: cfg,
 		models: data.NewModels(db),

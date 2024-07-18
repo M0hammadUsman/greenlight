@@ -7,8 +7,8 @@ import (
 	metric "github.com/M0hammadUsman/greenlight/internal/metrics"
 	"github.com/M0hammadUsman/greenlight/internal/validator"
 	"github.com/felixge/httpsnoop"
+	"github.com/tomasen/realip"
 	"golang.org/x/time/rate"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -51,11 +51,7 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
 	// Rate limiter middleware logic
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if app.config.limiter.enabled {
-			ip, _, err := net.SplitHostPort(r.RemoteAddr)
-			if err != nil {
-				app.serverErrorResponse(w, r, err)
-				return
-			}
+			ip := realip.FromRequest(r)
 			mu.Lock()
 			if _, exists := clients[ip]; !exists {
 				newLimiter := rate.NewLimiter(rate.Limit(app.config.limiter.rps), app.config.limiter.burst)

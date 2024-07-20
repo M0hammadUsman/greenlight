@@ -22,7 +22,7 @@ confirm:
 ## run/api: run the cmd/api application
 .PHONY: run/api
 run/api:
-	@go run ./cmd/api -db-dsn=${GREENLIGHT_DB_DSN}
+	@go run ./cmd/api -db-dsn=${GREENLIGHT_DB_DSN}?sslmode=disable
 
 ## db/migrations/new name=$1: create a new database migration
 .PHONY: db/migration/new
@@ -71,3 +71,7 @@ linker_flags = '-s -w -X main.buildTime=${current_time} -X main.version=${git_de
 build/api:
 	GOOS=windows GOARCH=amd64 go build -ldflags=${linker_flags} -o ./bin/greenlight.exe ./cmd/api
 	GOOS=linux GOARCH=amd64 go build -ldflags=${linker_flags} -o ./bin/greenlight ./cmd/api
+
+.PHONY: build/docker
+build/docker:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags=${linker_flags} -o ./bin/greenlight ./cmd/api

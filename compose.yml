@@ -1,0 +1,59 @@
+services:
+
+  db:
+    image: postgres:16-alpine
+    container_name: pg-greenlight
+    restart: unless-stopped
+    environment:
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+        POSTGRES_DB: ${POSTGRES_DB}
+        PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    networks:
+      - app_network
+
+  migrate:
+    image: migrate/migrate
+    container_name: greenlight-migrate
+    env_file:
+      - .env
+    volumes:
+      - ./migrations:/migrations
+    command:
+      ["-path", "/migrations", "-database", "${GREENLIGHT_DB_DSN}?sslmode=disable", "up"]
+    depends_on:
+      - db
+    networks:
+      - app_network
+
+  greenlight:
+    image: usman243/greenlight:latest
+    container_name: greenlight
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    ports:
+      - 8080:8080
+    entrypoint: ["./greenlight", "-db-dsn=${GREENLIGHT_DB_DSN}"]
+    restart: unless-stopped
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    name: pg_data
+
+networks:
+  app_network:
+    name: app_network

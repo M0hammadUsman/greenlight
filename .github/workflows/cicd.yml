@@ -23,11 +23,7 @@ jobs:
         run: echo "${{ secrets.ENV }}" >> .env
 
       - name: Rebuild & Restart using docker compose
-        run: |
-          if ! docker compose up -d --build; then
-          echo "Docker Compose failed"
-          exit 1
-          fi
+        run: docker compose up -d --build
 
       - name: Remove any dangling images
         run: docker image prune -f

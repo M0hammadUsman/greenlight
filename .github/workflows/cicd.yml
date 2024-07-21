@@ -22,22 +22,10 @@ jobs:
       - name: Create .env file
         run: echo "${{ secrets.ENV }}" >> .env
 
-      - name: Check for compose.yml
-        run: |
-          if [ -f "compose.yml" ]; then
-          echo "compose.yml found"
-          else
-          echo "compose.yml not found"
-          exit 1
-          fi
-
       - name: Rebuild & Restart using docker compose
         run: |
-          echo "Rebuilding and restarting services..."
-          docker compose -f compose.yml config  # Validate the compose file
-          if ! docker compose -f compose.yml up -d --build; then
+          if ! docker-compose up -d --build; then
             echo "Docker Compose failed"
-            docker compose -f compose.yml logs  # Print logs if it fails
             exit 1
           fi
 

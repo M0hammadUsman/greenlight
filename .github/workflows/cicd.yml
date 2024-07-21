@@ -1,0 +1,41 @@
+name: Greenlight_CICD_Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cleanup workspace
+        run: sudo rm -rf ${{ github.workspace }}/*
+
+      - name: Remove old env files
+        run: rm -f .envrc || true
+
+      - name: Create .env file
+        run: echo "${{ secrets.ENV }}" >> .env
+
+      - name: Rebuild & Restart using docker compose
+        run: |
+          if ! docker-compose up -d --build; then
+          echo "Docker Compose failed"
+          exit 1
+          fi
+
+      - name: Remove any dangling images
+        run: docker image prune -f
+
+      - name: Notify on success
+        if: success()
+        run: echo "Deployment successful!"
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "Deployment failed!"

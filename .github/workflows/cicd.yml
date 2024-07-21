@@ -31,9 +31,6 @@ jobs:
             exit 1
           fi
 
-      - name: Remove any dangling images
-        run: docker image prune -f
-
       - name: Notify on success
         if: success()
         run: echo "Deployment successful!"

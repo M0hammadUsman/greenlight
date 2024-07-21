@@ -31,6 +31,8 @@ services:
       - app_network
 
   greenlight:
+    build:
+      context: .
     image: usman243/greenlight:latest
     container_name: greenlight
     depends_on:

@@ -11,10 +11,10 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - uses: actions/checkout@v4
-
       - name: Cleanup workspace
         run: sudo rm -rf ${{ github.workspace }}/*
+
+      - uses: actions/checkout@v4
 
       - name: Remove old env files
         run: rm -f .env || true

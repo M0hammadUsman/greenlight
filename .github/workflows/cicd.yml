@@ -17,14 +17,14 @@ jobs:
         run: sudo rm -rf ${{ github.workspace }}/*
 
       - name: Remove old env files
-        run: rm -f .envrc || true
+        run: rm -f .env || true
 
       - name: Create .env file
         run: echo "${{ secrets.ENV }}" >> .env
 
       - name: Rebuild & Restart using docker compose
         run: |
-          if ! docker-compose up -d --build; then
+          if ! docker compose up -d --build; then
           echo "Docker Compose failed"
           exit 1
           fi

@@ -17,10 +17,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Remove old env files
-        run: rm -f .env || true
+        run: rm -f .env .envrc || true
 
-      - name: Create .env file
-        run: echo "${{ secrets.ENV }}" >> .env
+      - name: Create .env & .envrc file
+        run: |
+          echo "${{ secrets.ENV }}" >> .env
+          echo "${{ secrets.ENVRC }}" >> .envrc
 
       - name: Rebuild & Restart using docker compose
         run: |
